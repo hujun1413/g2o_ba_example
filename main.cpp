@@ -134,25 +134,40 @@ int main( int argc, char** argv )
         optimizer.addEdge( edge );
         edges.push_back(edge);
     }
+
+    fstream f("../data/txt_out.txt", ios::out); //创建，清空写 
+    //ofstream f;
+    //f.open("txt_out.txt", ios::app); //创建，追加 
+    if(f.bad()) 
+    //if(!f)
+    {  
+        cout << "打开文件出错!" << endl;  
+        return -1;  
+    } 
     
     cout<<"开始优化"<<endl;
+    f<<"开始优化"<<endl;
     optimizer.setVerbose(true);
     optimizer.initializeOptimization();
     optimizer.optimize(10);
     cout<<"优化完毕"<<endl;
+    f<<"优化完毕"<<endl;
     
     //我们比较关心两帧之间的变换矩阵
     g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>( optimizer.vertex(1) );
     Eigen::Isometry3d pose = v->estimate();
-    cout<<"Pose="<<endl<<pose.matrix()<<endl;
+    //cout<<"Pose="<<endl<<pose.matrix()<<endl;
+    f<<"Pose="<<endl<<pose.matrix()<<endl;
     
     // 以及所有特征点的位置
     for ( size_t i=0; i<pts1.size(); i++ )
     {
         g2o::VertexSBAPointXYZ* v = dynamic_cast<g2o::VertexSBAPointXYZ*> (optimizer.vertex(i+2));
-        cout<<"vertex id "<<i+2<<", pos = ";
+        //cout<<"vertex id "<<i+2<<", pos = ";
+        f<<"vertex id "<<i+2<<", pos = ";
         Eigen::Vector3d pos = v->estimate();
-        cout<<pos(0)<<","<<pos(1)<<","<<pos(2)<<endl;
+        //cout<<pos(0)<<","<<pos(1)<<","<<pos(2)<<endl;
+        f<<pos(0)<<","<<pos(1)<<","<<pos(2)<<endl;
     }
     
     // 估计inlier的个数
@@ -163,7 +178,8 @@ int main( int argc, char** argv )
         // chi2 就是 error*\Omega*error, 如果这个数很大，说明此边的值与其他边很不相符
         if ( e->chi2() > 1 )
         {
-            cout<<"error = "<<e->chi2()<<endl;
+            //cout<<"error = "<<e->chi2()<<endl;
+            f<<"error = "<<e->chi2()<<endl;
         }
         else 
         {
@@ -172,18 +188,32 @@ int main( int argc, char** argv )
     }
     
     cout<<"inliers in total points: "<<inliers<<"/"<<pts1.size()+pts2.size()<<endl;
-    optimizer.save("ba.g2o");
+    f.close();
+    optimizer.save("../data/ba.g2o");
     return 0;
 }
 
 
 int     findCorrespondingPoints( const cv::Mat& img1, const cv::Mat& img2, vector<cv::Point2f>& points1, vector<cv::Point2f>& points2 )
 {
-    cv::ORB orb;
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(500);
     vector<cv::KeyPoint> kp1, kp2;
     cv::Mat desp1, desp2;
-    orb( img1, cv::Mat(), kp1, desp1 );
-    orb( img2, cv::Mat(), kp2, desp2 );
+    //orb( img1, cv::Mat(), kp1, desp1 );
+    //orb( img2, cv::Mat(), kp2, desp2 );
+    cv::Mat showimage;
+    orb->detectAndCompute(img1, cv::Mat(), kp1, desp1);
+	drawKeypoints(img1, kp1, showimage);
+	cv::imshow("ORB keypoints1", showimage);
+    cv::waitKey(0);
+    cv::imwrite("../data/ORB_keypoints1.png", showimage);
+
+    orb->detectAndCompute(img2, cv::Mat(), kp2, desp2);
+	drawKeypoints(img2, kp2, showimage);
+	cv::imshow("ORB keypoints2", showimage);
+    cv::waitKey(0);
+    cv::imwrite("../data/ORB_keypoints2.png", showimage);
+
     cout<<"分别找到了"<<kp1.size()<<"和"<<kp2.size()<<"个特征点"<<endl;
     
     cv::Ptr<cv::DescriptorMatcher>  matcher = cv::DescriptorMatcher::create( "BruteForce-Hamming");
@@ -201,6 +231,10 @@ int     findCorrespondingPoints( const cv::Mat& img1, const cv::Mat& img2, vecto
     if (matches.size() <= 20) //匹配点太少
         return false;
     
+    drawMatches( img1, kp1, img2, kp2, matches, showimage);
+    cv::imshow("match result", showimage);
+    cv::waitKey(0);
+    cv::imwrite("../data/ORB_match.png", showimage);
     for ( auto m:matches )
     {
         points1.push_back( kp1[m.queryIdx].pt );
